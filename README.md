@@ -2,14 +2,33 @@
 
 In the reverse diffusion process, a one-dimensional U-Net architecture is employed as the denoising network backbone. The network comprises three hierarchical levels with progressive downsampling and upsampling operations. At each level, self-attention mechanisms enable the network to capture long-range temporal dependencies within fault features. Crucially, cross-attention blocks are selectively integrated into the higher resolution levels of both the encoding and decoding paths.
 
-The core innovation lies in the health-guided cross-attention mechanism, which injects domain-specific condition information into the feature synthesis process. During the training phase, fused healthy features from the source domain are used as conditioning information within the cross-attention modules. These healthy features contain the specific perturbations and impulses induced by the source operating condition, such as vibration signatures due to particular load levels or rotational speeds. The cross-attention mechanism computes attention weights that link the noisy fault features (query) to the healthy condition features (key and value), enabling the model to learn how condition-specific perturbations should influence the denoising process.
+### Fusion of source domain healthy features
+
+The conditioning information for the training phase is derived from the fused healthy features of the source domain. Prior to entering the cross-attention mechanism, healthy signals from the source domain are aggregated across all samples to compute a representative condition signature. Specifically, the fused healthy feature for the source domain is computed as:
+
+$$\mathbf{h}_s = \frac{1}{N_h} \sum_{i=1}^{N_h} \mathbf{H}_{s,i}$$
+
+where $\mathbf{H}_{s,i}$ represents the healthy signal features from the source domain (e.g., at operating condition $s$), $N_h$ denotes the total number of healthy samples available from the source domain, and $\mathbf{h}_s$ is the averaged healthy feature representation that captures the operating-condition-specific perturbations and impulses characteristic of the source domain. This aggregated representation encodes the baseline vibration signature and environmental noise patterns unique to the source operating condition.
+
+### Cross-attention mechanism with health-guided conditioning
+
+The core innovation lies in the health-guided cross-attention mechanism, which injects domain-specific condition information into the feature synthesis process. During the training phase, the fused healthy features $\mathbf{h}_s$ are used as conditioning information within the cross-attention modules. These healthy features contain the specific perturbations and impulses induced by the source operating condition, such as vibration signatures due to particular load levels or rotational speeds. The cross-attention mechanism computes attention weights that link the noisy fault features (query) to the healthy condition features (key and value), enabling the model to learn how condition-specific perturbations should influence the denoising process.
 
 Mathematically, the cross-attention operation is formulated as:
-Attention(Q, K, V) = softmax(Q K^T / √d_k) V
 
-where Q represents the query vectors derived from the current noisy features, K and V are the key and value vectors computed from the conditioning healthy features, and d_k denotes the dimension of each attention head. The normalization by √d_k ensures numerical stability. The resulting attention-weighted combination allows the model to selectively emphasize those aspects of the source condition that are most relevant to preserving domain-specific characteristics during feature generation.
+$$\text{Attention}(Q, K, V) = \text{softmax}\left(\frac{QK^T}{\sqrt{d_k}}\right) V$$
 
-During the generation phase, the same cross-attention mechanism operates with different conditioning inputs. Instead of source domain healthy features, the model receives the difference between target domain and source domain healthy features. This delta conditioning approach enables the network to learn and apply domain-specific transformations that adapt synthesized features toward the target operating condition. The mechanism effectively captures what distinguishes the target domain from the source, guiding the synthesis toward target-domain characteristic fault features without requiring access to target-domain fault training data.
+where $Q \in \mathbb{R}^{L \times d_k}$ represents the query vectors derived from the current noisy features at sequence length $L$, $K, V \in \mathbb{R}^{1 \times d_k}$ are the key and value vectors computed from the conditioning healthy features (note that $\mathbf{h}_s$ is broadcast across the sequence dimension), and $d_k$ denotes the dimension of each attention head. The normalization by $\sqrt{d_k}$ ensures numerical stability. The resulting attention-weighted combination allows the model to selectively emphasize those aspects of the source condition that are most relevant to preserving domain-specific characteristics during feature generation.
+
+### Delta conditioning for target domain adaptation
+
+During the generation phase, the same cross-attention mechanism operates with different conditioning inputs. Instead of source domain healthy features, the model receives the difference between target domain and source domain healthy features. This delta conditioning approach is formulated as:
+
+$$\mathbf{c}_{\Delta} = \mathbf{h}_t - \mathbf{h}_s$$
+
+where $\mathbf{h}_t = \frac{1}{N_h'} \sum_{i=1}^{N_h'} \mathbf{H}_{t,i}$ represents the averaged healthy feature from the target domain (e.g., at operating condition $t$), $\mathbf{h}_s$ is the source domain healthy feature as previously defined, and $\mathbf{c}_{\Delta}$ represents the delta conditioning vector that captures the distributional shift between domains. 
+
+This delta representation is particularly powerful because it explicitly encodes what distinguishes the target domain from the source without introducing actual faulty target-domain information (which is unavailable). The network learns to interpret $\mathbf{c}_{\Delta}$ as a transformation instruction: "apply these domain-specific adjustments to synthesize features that exhibit target-domain characteristics." By operating on the difference rather than absolute conditions, the mechanism becomes domain-agnostic and can generalize to multiple target domains, provided that healthy reference signals are available for those domains.
 
 The selective placement of cross-attention modules is strategic. They are applied only at higher resolution levels of the network, where fine-grained temporal patterns are preserved. Lower resolution levels, which encode more abstract structural information, bypass cross-attention to focus on general fault characteristics that generalize across domains. This design prevents over-conditioning on domain-specific details while maintaining sufficient guidance to capture operating-condition-induced variations.
 
@@ -22,11 +41,11 @@ The self-attention blocks embedded within the U-Net architecture compute attenti
 
 The fault-prior self-attention mechanism operates through progressive refinement across diffusion steps. In early denoising steps, when noise is still substantial, the self-attention mechanism broadly identifies major structural features. As the process continues toward later steps, self-attention becomes increasingly fine-grained, refining subtle temporal patterns that distinguish fault types and severity levels. The mechanism prevents the generation process from drifting toward random features or misclassified fault types through step-by-step structural consistency enforcement.
 
-Specifically, the forward process of generation proceeds as follows. Starting from Gaussian random noise x_T at timestep T, the model applies the reverse diffusion process for T steps. At each step t, the network computes a prediction of the noise component ε_t using both self-attention (which constrains fault-type consistency) and the timestep embedding (which provides the denoising guidance for the current step). The prediction is used to refine the feature according to the equation:
+Specifically, the forward process of generation proceeds as follows. Starting from Gaussian random noise $\mathbf{x}_T$ at timestep $T$, the model applies the reverse diffusion process for $T$ steps. At each step $t$, the network computes a prediction of the noise component using both self-attention (which constrains fault-type consistency) and the timestep embedding (which provides the denoising guidance for the current step). The prediction is used to refine the feature according to the equation:
 
-x_{t-1} = (1/√α_t)[x_t - ((1-α_t)/√(1-ᾱ_t)) ε_θ(x_t, t, c)]
+$$\mathbf{x}_{t-1} = \frac{1}{\sqrt{\alpha_t}} \left[ \mathbf{x}_t - \frac{1 - \alpha_t}{\sqrt{1 - \bar{\alpha}_t}} \boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t, \mathbf{c}_{\Delta}) \right]$$
 
-where α_t is the noise schedule coefficient, ᾱ_t is its cumulative product, ε_θ denotes the network prediction, and c represents the conditioning information (including the delta between target and source domain health features).
+where $\alpha_t$ is the noise schedule coefficient from the pre-defined diffusion schedule, $\bar{\alpha}_t = \prod_{i=1}^{t} \alpha_i$ is its cumulative product, $\boldsymbol{\epsilon}_\theta(\mathbf{x}_t, t, \mathbf{c}_{\Delta})$ denotes the network's prediction of the noise component at step $t$, and $\mathbf{c}_{\Delta}$ represents the delta conditioning information (the difference between target and source domain healthy features as defined in the preceding section).
 
 The self-attention mechanism is crucial for maintaining fault-type coherence. During training on source fault data, the network learns distinctive attention patterns for each fault type. These patterns capture which features correlate with specific fault classes. During generation, the same attention mechanisms reactivate these learned patterns, guiding the synthesis to produce features with characteristic fault signatures. For instance, ball fault features possess different spectral-temporal patterns compared to inner race faults, and the self-attention mechanism preserves these distinctions by preferentially amplifying fault-type-specific feature correlations.
 
