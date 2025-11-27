@@ -1,105 +1,101 @@
 ## Multi-view Feature Encoding and Fusion with Tiny Attention Mechanism
 
-Industrial vibration signals contain rich information distributed across multiple domains. To obtain comprehensive representations of fault characteristics, the proposed framework extracts features from three complementary domains and fuses them through a view-level attention mechanism. This section describes the multi-view feature extraction and fusion strategy.
+Industrial vibration signals contain abundant information distributed across multiple domains. To capture comprehensive fault characteristics from diverse perspectives, the proposed framework employs multi-view feature encoding to extract features from three complementary domains, which are then fused through a tiny attention mechanism. This section describes the multi-view feature encoding strategy and the subsequent fusion process.
 
-### 3.1.1 Three-View Feature Extraction
+### 3.1.1 Multi-view Feature Encoding
 
-Given an input signal $\mathbf{x} \in \mathbb{R}^{L}$ of length $L$, the framework computes feature representations from three distinct domains:
+The multi-view feature encoding process extracts feature representations from three distinct domains: time domain, frequency domain, and time-frequency domain. Each view provides a unique perspective on the input signal and captures different aspects of the fault characteristics.
 
-**Time-Domain View.** The time-domain features are extracted by processing the raw vibration signal through a one-dimensional convolutional encoder:
+For the time-domain view, the raw vibration signal $\mathbf{x} \in \mathbb{R}^{L}$ of length $L$ is processed through a one-dimensional convolutional neural network encoder:
 
 $$\mathbf{h}_t = \mathcal{F}_{\text{time}}(\mathbf{x}; \Theta_t)$$
 
-where $\mathcal{F}_{\text{time}}(\cdot; \Theta_t)$ denotes the time-domain CNN encoder with learnable parameters $\Theta_t$, and $\mathbf{h}_t \in \mathbb{R}^{C \times T}$ represents the extracted features with channel dimension $C$ and temporal sequence length $T$.
+where $\mathcal{F}_{\text{time}}(\cdot; \Theta_t)$ represents the time-domain CNN encoder with learnable parameters $\Theta_t$. The resulting time-domain features $\mathbf{h}_t \in \mathbb{R}^{C \times T}$ maintain the temporal structure of the original signal, with $C$ denoting the feature channel dimension and $T$ the temporal sequence length.
 
-**Frequency-Domain View.** The frequency spectrum is obtained by applying the Fast Fourier Transform to the input signal:
+For the frequency-domain view, the frequency spectrum is obtained by applying the Fast Fourier Transform to the input signal:
 
 $$\mathbf{X}_{f} = \text{FFT}(\mathbf{x})$$
 
-The magnitude spectrum is extracted as $\tilde{\mathbf{X}}_f = |\mathbf{X}_f| \in \mathbb{R}^{L/2+1}$. This magnitude spectrum is then processed through an identical one-dimensional convolutional architecture:
+The magnitude spectrum is extracted as $\tilde{\mathbf{X}}_f = |\mathbf{X}_f| \in \mathbb{R}^{L/2+1}$, which captures the spectral content of the signal. This magnitude spectrum is then processed through an identical one-dimensional convolutional architecture:
 
 $$\mathbf{h}_f = \mathcal{F}_{\text{freq}}(\tilde{\mathbf{X}}_f; \Theta_f)$$
 
-where $\mathbf{h}_f \in \mathbb{R}^{C \times T}$ denotes the frequency-domain features and $\Theta_f$ contains the encoder parameters.
+where $\mathbf{h}_f \in \mathbb{R}^{C \times T}$ denotes the frequency-domain features and $\Theta_f$ contains the corresponding encoder parameters.
 
-**Time-Frequency-Domain View.** The continuous wavelet transform is employed to capture multi-scale temporal-spectral information:
+For the time-frequency-domain view, the continuous wavelet transform is employed to capture multi-scale temporal-spectral information:
 
 $$\mathbf{W}_{s,\tau} = \int_{-\infty}^{+\infty} \mathbf{x}(t) \psi_{s,\tau}^{*}(t) dt$$
 
-where $\psi_{s,\tau}(t) = \frac{1}{\sqrt{s}}\psi\left(\frac{t-\tau}{s}\right)$ is the scaled and shifted wavelet function, with scale parameter $s$ and time shift $\tau$. The magnitude coefficients $|\mathbf{W}_{s,\tau}|$ are arranged into a two-dimensional representation and resized to a standard dimension of $64 \times 64$:
+where $\psi_{s,\tau}(t) = \frac{1}{\sqrt{s}}\psi\left(\frac{t-\tau}{s}\right)$ is the wavelet function with scale parameter $s$ and time shift $\tau$. The magnitude coefficients are arranged into a two-dimensional matrix and resized to a standard dimension of $64 \times 64$:
 
 $$\mathbf{M}_{w} = \text{Resize}(|\mathbf{W}_{s,\tau}|; 64 \times 64)$$
 
-A two-dimensional convolutional encoder then processes this representation:
+A two-dimensional convolutional encoder processes this time-frequency representation:
 
 $$\mathbf{h}_w = \mathcal{F}_{\text{wavelet}}(\mathbf{M}_{w}; \Theta_w)$$
 
 yielding the time-frequency-domain features $\mathbf{h}_w \in \mathbb{R}^{C \times T}$, where $\Theta_w$ denotes the encoder parameters.
 
-### 3.1.2 View-Level Attention Fusion
+The multi-view feature encoding process produces three heterogeneous feature representations, each capturing complementary information from a different domain perspective. The time-domain features preserve temporal dynamics, the frequency-domain features reveal spectral characteristics, and the time-frequency-domain features provide multi-scale temporal-spectral patterns. Integrating these three views into a unified representation requires a fusion mechanism that can adaptively weight the contributions of each view.
 
-After extracting heterogeneous representations from the three views, a view-level attention mechanism is employed to compute adaptive weights for each view and fuse them into a comprehensive feature representation. This approach differs from sequence-level attention mechanisms by operating at the view level, enabling the model to learn the importance of each entire view domain.
+### 3.1.2 Fusion with Tiny Attention Mechanism
 
-**View Feature Stacking.** The three view feature tensors are first stacked together:
+The three encoded feature representations are fused through a tiny attention mechanism that computes view-level attention weights and combines the features accordingly. Unlike conventional fusion approaches that employ fixed rules or complex interaction patterns, the tiny attention mechanism learns data-driven weights for each view in a lightweight and interpretable manner.
 
-$$\mathcal{V} = \text{Stack}([\mathbf{h}_t, \mathbf{h}_f, \mathbf{h}_w]) \in \mathbb{R}^{B \times V \times C \times T}$$
+The tiny attention mechanism operates by first gathering the three view features and computing importance weights through a shallow neural network. The three encoded features $\mathbf{h}_t$, $\mathbf{h}_f$, and $\mathbf{h}_w$ are stacked together to form a multi-view feature representation. At each temporal position, the mechanism computes a weight for each view that indicates its relative importance in the final fused representation.
 
-where $B$ denotes the batch size, $V=3$ is the number of views, and the result has shape $(B, 3, C, T)$. The stacked tensor is then reshaped for per-timestep processing:
+**Weight Computation and Aggregation.** For each temporal position in the feature sequence, the tiny attention mechanism computes three scalar weights, one for each view. Let the features at temporal position $i$ be denoted as the column vectors extracted from the three domain views. The weight computation is performed through a small multi-layer perceptron that processes the stacked view features. Specifically, the mechanism first applies a linear transformation that projects the concatenated feature vector from dimension $C$ to a reduced dimension of $C/4$, followed by a ReLU activation function to introduce nonlinearity:
 
-$$\mathcal{V}_{\text{reshaped}} = \text{Reshape}(\mathcal{V}; (B \cdot T, V, C)) \in \mathbb{R}^{B \cdot T \times V \times C}$$
+$$\mathbf{a}_i = \text{ReLU}(\mathcal{F}_{\text{concat},i} \mathbf{W}_1 + \mathbf{b}_1)$$
 
-This reshaping operation rearranges the tensor dimensions to process each temporal position across all views independently, effectively treating the fusion as a per-position operation.
+where $\mathcal{F}_{\text{concat},i}$ represents the concatenation of the features from all three views at temporal position $i$, $\mathbf{W}_1 \in \mathbb{R}^{C \times (C/4)}$ is the first weight matrix that reduces the dimensionality, $\mathbf{b}_1 \in \mathbb{R}^{C/4}$ is the corresponding bias vector, and $\mathbf{a}_i \in \mathbb{R}^{C/4}$ is the intermediate activation. This dimensionality reduction serves to decrease computational complexity while maintaining sufficient representational capacity to capture the essential information needed for computing view weights.
 
-**View Weight Computation.** For each temporal position, the view-level attention mechanism computes a weight for each view through a lightweight neural network. Let $\mathcal{V}_{reshaped}^{(i)} \in \mathbb{R}^{V \times C}$ denote the features at temporal position $i$. The view weights are computed as:
-
-$$\mathbf{w}_i = \text{ViewWeightNet}(\mathcal{V}_{\text{reshaped}}^{(i)}; \Theta_{\text{weight}})$$
-
-where the ViewWeightNet is a small multi-layer perceptron defined as:
-
-$$\mathbf{a}_i = \text{ReLU}(\mathcal{V}_{\text{reshaped}}^{(i)} \mathbf{W}_1 + \mathbf{b}_1)$$
+The second layer of the weight network projects the intermediate representation from dimension $C/4$ to the view dimension, which is three in this case. This projection is followed by a softmax function to ensure that the computed weights form a valid probability distribution over the views:
 
 $$\mathbf{w}_i = \text{Softmax}(\mathbf{a}_i \mathbf{W}_2 + \mathbf{b}_2)$$
 
-where $\mathbf{W}_1 \in \mathbb{R}^{C \times (C/4)}$ is the first weight matrix that projects from the channel dimension $C$ to $C/4$, and $\mathbf{W}_2 \in \mathbb{R}^{(C/4) \times V}$ projects to $V$ view dimensions. The softmax operation ensures that $\mathbf{w}_i \in \mathbb{R}^{V}$ sums to one, yielding a valid probability distribution over the views.
+where $\mathbf{W}_2 \in \mathbb{R}^{(C/4) \times V}$ is the second weight matrix that projects to $V=3$ view dimensions, $\mathbf{b}_2 \in \mathbb{R}^{V}$ is the bias vector, and $\mathbf{w}_i \in \mathbb{R}^{V}$ are the computed weights. The softmax normalization ensures that $\sum_{v=1}^{V} w_i^{(v)} = 1$, where $w_i^{(v)}$ denotes the weight assigned to the $v$-th view at temporal position $i$.
 
-**Weighted View Fusion.** Once the view weights are computed, the final fused feature is obtained through weighted summation:
+**Feature Fusion via Weighted Aggregation.** Once the view weights are computed for each temporal position, the final fused features are obtained through weighted aggregation. The fused feature at each temporal position is computed as a weighted combination of the view-specific features:
 
-$$\mathbf{h}_{\text{fused},i} = \sum_{v=1}^{V} w_i^{(v)} \cdot \mathcal{V}_{\text{reshaped},i}^{(v)}$$
+$$\mathbf{h}_{\text{fused},i} = \sum_{v=1}^{V} w_i^{(v)} \cdot \mathbf{h}_{v,i}$$
 
-where $w_i^{(v)}$ is the $v$-th weight for temporal position $i$, and $\mathcal{V}_{\text{reshaped},i}^{(v)}$ is the feature vector of the $v$-th view at position $i$. This element-wise weighted summation produces fused features $\mathbf{h}_{\text{fused},i} \in \mathbb{R}^{C}$ for each temporal position.
+where $\mathbf{h}_{v,i}$ denotes the feature vector from view $v$ at temporal position $i$, and the sum is taken over all three views. This weighted aggregation operation ensures that each temporal position can emphasize the views that are most informative at that particular time instant. The temporal flexibility of this approach is crucial for industrial fault diagnosis, as different frequency components and temporal characteristics may be more salient at different time periods during the evolution of a fault.
 
-**Output Projection and Reshaping.** After fusion, an output projection layer and dropout are applied for regularization and dimensionality adjustment:
+The aggregated features are then processed through an output projection layer that applies a linear transformation to maintain the original feature dimensionality:
 
-$$\mathbf{h}_{\text{projected},i} = \text{Dropout}(\mathbf{h}_{\text{fused},i} \mathbf{W}_O + \mathbf{b}_O)$$
+$$\mathbf{h}_{\text{fused}}^{\text{final}} = \text{Dropout}(\mathbf{h}_{\text{fused}} \mathbf{W}_O + \mathbf{b}_O)$$
 
-where $\mathbf{W}_O \in \mathbb{R}^{C \times C}$ and $\mathbf{b}_O \in \mathbb{R}^{C}$ are the output projection parameters. Finally, the features are reshaped back to the original tensor format:
+where $\mathbf{W}_O \in \mathbb{R}^{C \times C}$ and $\mathbf{b}_O \in \mathbb{R}^{C}$ are the projection parameters, and dropout regularization with a rate of $0.1$ is applied to prevent overfitting. The resulting fused representation $\mathbf{h}_{\text{fused}}^{\text{final}} \in \mathbb{R}^{C \times T}$ constitutes a comprehensive feature representation that integrates information from all three domain perspectives through learned, adaptive importance weights.
 
-$$\mathbf{h}_{\text{fused}} = \text{Reshape}([\mathbf{h}_{\text{projected},1}, \ldots, \mathbf{h}_{\text{projected},B \cdot T}]; (B, C, T))$$
+### 3.1.3 Advantages of the Tiny Attention Fusion Approach
 
-The resulting tensor $\mathbf{h}_{\text{fused}} \in \mathbb{R}^{B \times C \times T}$ is the final fused representation that integrates information from all three views in a learned, adaptive manner.
+The tiny attention mechanism offers several advantages over alternative fusion strategies. First, the mechanism learns view-specific weights directly from the training data, allowing the model to adaptively discover which views are most important given the input signal characteristics. This data-driven approach is more flexible than fixed fusion rules such as simple concatenation or equal weighting, which cannot adjust to varying signal properties.
 
-### 3.1.3 Advantages of View-Level Attention Fusion
+Second, the computational efficiency of the tiny attention mechanism is significantly higher compared to more complex fusion approaches. The weight network consists only of two fully connected layers with a dimensionality reduction step, resulting in a linear computational cost with respect to the sequence length. This is in stark contrast to sequence-level attention mechanisms that operate on the temporal dimension and incur quadratic complexity in the sequence length.
 
-The view-level attention fusion mechanism offers several advantages over alternative fusion strategies. First, by learning view-specific weights, the mechanism can adaptively adjust the contribution of each domain based on the input signal characteristics. Unlike fixed fusion rules (e.g., simple concatenation or equal weighting), the view-level attention learns data-driven importance weights directly from the training data.
+Third, the per-timestep weighting enables the mechanism to assign different importance levels to different views at different time instants. This temporal flexibility is particularly valuable for fault diagnosis applications, where the relevance of different frequency components and temporal patterns may vary during the fault evolution. The mechanism can emphasize the time-domain view during periods of impulsive transients while emphasizing frequency-domain information during stationary fault phases.
 
-Second, the lightweight nature of the weight network ensures computational efficiency. Rather than computing complex pairwise interactions between views through multi-head cross-attention, the view-level attention requires only a simple multi-layer perceptron to compute scalar weights for each view. This design choice reduces computational overhead while maintaining the capacity to capture view-specific information relevance.
-
-Third, the per-timestep weighting enables the mechanism to assign different importance to different views at different temporal locations. This temporal flexibility allows the model to emphasize views that are more informative at specific time instants, which is particularly valuable for transient fault detection where different frequency components may be salient at different times.
-
-Finally, the interpretability of view weights is enhanced compared to complex attention mechanisms. The learned weights $\mathbf{w}_i$ directly indicate which views are deemed important at each temporal position, providing insight into the model's fusion decisions.
+Finally, the learned weights provide interpretability into the model's fusion decisions. The scalar weights $w_i^{(v)}$ directly indicate which views the model deems important at each temporal location, offering insights into the signal characteristics and the model's reasoning process. This interpretability is important for industrial applications where understanding and validating model decisions is essential.
 
 ### 3.1.4 Mathematical Formulation Summary
 
-The complete view-level fusion operation can be formulated as a composition of functions. Let $\mathcal{G}_{\text{view}}$ denote the view fusion operator:
+The complete multi-view feature encoding and fusion process can be formulated as a functional composition. Let the multi-view feature encoding be denoted as:
 
-$$\mathbf{h}_{\text{fused}} = \mathcal{G}_{\text{view}}(\{\mathbf{h}_t, \mathbf{h}_f, \mathbf{h}_w\}; \Theta_{\text{view}})$$
+$$\mathcal{H} = \{\mathcal{F}_{\text{time}}(\mathbf{x}), \mathcal{F}_{\text{freq}}(\mathbf{x}), \mathcal{F}_{\text{wavelet}}(\mathbf{x})\}$$
 
-where $\Theta_{\text{view}} = \{\mathbf{W}_1, \mathbf{W}_2, \mathbf{W}_O, \mathbf{b}_1, \mathbf{b}_2, \mathbf{b}_O\}$ denotes the complete set of learnable parameters in the view fusion module. The fusion operation can be decomposed as:
+The tiny attention-based fusion operation is then expressed as:
 
-$$\mathcal{G}_{\text{view}} = \text{Reshape} \circ \text{Dropout} \circ \text{Proj} \circ \text{WeightedSum} \circ \text{WeightNet} \circ \text{Reshape}$$
+$$\mathbf{h}_{\text{fused}}^{\text{final}} = \mathcal{G}_{\text{tiny}}(\mathcal{H}; \Theta_{\text{attention}})$$
 
-where each composition represents a sequential operation in the pipeline.
+where $\mathcal{G}_{\text{tiny}}(\cdot)$ represents the tiny attention fusion operator and $\Theta_{\text{attention}} = \{\mathbf{W}_1, \mathbf{b}_1, \mathbf{W}_2, \mathbf{b}_2, \mathbf{W}_O, \mathbf{b}_O\}$ denotes the complete set of learnable parameters in the fusion mechanism.
 
-The learned view weights provide interpretable information about domain importance. For a given temporal position $i$ and view $v$, the weight $w_i^{(v)}$ can be analyzed to understand which domains contribute most to the final representation at different temporal locations. This interpretability is important for understanding the model's behavior in industrial fault diagnosis applications where domain knowledge is valuable.
+The core operation of the tiny attention mechanism can be expressed as a composition of the weight computation and weighted aggregation operations:
 
-The fused representation $\mathbf{h}_{\text{fused}}$ serves as the comprehensive feature input to subsequent modules (e.g., the latent diffusion model for feature synthesis), ensuring that unseen-domain features are generated from a balanced and adaptively-weighted combination of time-domain, frequency-domain, and time-frequency-domain information.
+$$\mathbf{w} = \text{Softmax}(\text{ReLU}(\mathcal{H} \mathbf{W}_1 + \mathbf{b}_1) \mathbf{W}_2 + \mathbf{b}_2)$$
+
+$$\mathbf{h}_{\text{fused}} = \sum_{v=1}^{V} \mathbf{w}^{(v)} \odot \mathbf{h}_v$$
+
+where $\odot$ denotes element-wise multiplication applied across the feature dimensions. The learned weights $\mathbf{w}$ provide a mechanism for the model to dynamically adjust the contribution of each view based on the input characteristics, while the weighted aggregation ensures that the final representation combines information from all three views in a principled manner.
+
+The fused representation $\mathbf{h}_{\text{fused}}^{\text{final}}$ serves as the comprehensive multi-view feature input to subsequent processing modules, such as the latent diffusion model for feature synthesis. By integrating heterogeneous representations through learned, temporal-aware weights, the tiny attention mechanism enables the model to capture the full richness of information distributed across different signal domains while maintaining computational efficiency and interpretability.
